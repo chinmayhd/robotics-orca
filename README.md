@@ -15,7 +15,7 @@ https://github.com/chinmayhd/robotics-orca/assets/116327618/07fb5f23-f486-4c54-b
 https://github.com/chinmayhd/robotics-orca/assets/116327618/f575999f-13b0-4daf-97bb-773f188ce3e8
 
 
-## Non-holonomic behavior
+## Non-holonomic behavior (Position)
 
 #### 2 agents
 https://github.com/chinmayhd/robotics-orca/assets/116327618/1a12df2c-5c7b-4874-a842-882e0580792c
