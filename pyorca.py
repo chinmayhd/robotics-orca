@@ -24,6 +24,7 @@ S. J. Guy, M. Lin and D. Manocha in 'Reciprocal n-body Collision Avoidance'."""
 from __future__ import division
 
 import numpy
+import numpy as np
 from numpy import array, sqrt, copysign, dot
 from numpy.linalg import det
 
@@ -45,15 +46,24 @@ class Agent(object):
         self.radius = radius
         self.max_speed = max_speed
         self.pref_velocity = array(pref_velocity)
+        # self.ang_vel = None
+        #
+        # if self.ang_vel == 0:
+        #     self.linear_vel = self.velocity[0]
+        # else:
+        #     self.linear_vel = sqrt(self.velocity[0]^2 + self.velocity[1]^2) / np.sin(self.ang_vel)
 
 
-def orca(agent, colliding_agents, t, dt):
+def orca(agent, colliding_agents, t, dt, behavior='holonomic'):
     """Compute ORCA solution for agent. NOTE: velocity must be _instantly_
     changed on tick *edge*, like first-order integration, otherwise the method
     undercompensates and you will still risk colliding."""
     lines = []
     for collider in colliding_agents:
-        dv, n = get_avoidance_velocity(agent, collider, t, dt)
+        if behavior == 'holonomic':
+            dv, n = get_avoidance_velocity(agent, collider, t, dt)
+        else:
+            dv, n = get_non_holonomic_avoidance_velocity(agent, collider, t, dt)
         line = Line(agent.velocity + dv / 2, n)
         lines.append(line)
     return halfplane_optimize(lines, agent.pref_velocity), lines
@@ -99,8 +109,10 @@ def get_avoidance_velocity(agent, collider, t, dt):
     r = agent.radius + collider.radius
 
     x_len_sq = norm_sq(x)
+    dist = sqrt((agent.position[0] - collider.position[0]) ** 2 + (agent.position[1] - collider.position[1]) ** 2)
 
-    if x_len_sq >= r * r:
+    if dist >= r:
+        # print(f"dist and radius are {dist} and {r}")
         # We need to decide whether to project onto the disk truncating the VO
         # or onto the sides.
         #
@@ -114,13 +126,13 @@ def get_avoidance_velocity(agent, collider, t, dt):
 
         if dot(v - adjusted_center, adjusted_center) < 0:
             # v lies in the front part of the cone
-            print("front")
+            # print("front")
             # print("front", adjusted_center, x_len_sq, r, x, t)
             w = v - x/t
             u = normalized(w) * r/t - w
             n = normalized(w)
         else: # v lies in the rest of the cone
-            print("sides")
+            # print("sides")
             # Rotate x in the direction of v, to make it a side of the cone.
             # Then project v onto that, and calculate the difference.
             leg_len = sqrt(x_len_sq - r*r)
@@ -142,12 +154,57 @@ def get_avoidance_velocity(agent, collider, t, dt):
         # We're already intersecting. Pick the closest velocity to our
         # velocity that will get us out of the collision within the next
         # timestep.
-        print("intersecting")
+        # print("intersecting")
         w = v - x/dt
         u = normalized(w) * r/dt - w
         n = normalized(w)
-    print(u,n)
+    # print(u,n)
     return u, n
+
+def get_non_holonomic_avoidance_velocity(agent, collider, t, dt):
+    """Get the smallest relative change in velocity between agent and collider
+    that will get them onto the boundary of each other's velocity obstacle
+    (VO), and thus avert collision."""
+    # Calculate the relative velocity between the two agents
+    relative_velocity = agent.velocity - collider.velocity
+
+    # Calculate the relative position between the two agents
+    relative_position = collider.position - agent.position
+
+    # Calculate the relative distance and direction
+    relative_distance = np.linalg.norm(relative_position)
+    relative_direction = relative_position / relative_distance
+
+    # Calculate the time to collision if they maintain their current velocities
+    time_to_collision = relative_distance / np.linalg.norm(relative_velocity)
+
+    # Calculate the angle between the relative velocity and the relative position
+    angle = np.arctan2(relative_direction[1], relative_direction[0])
+
+    # Calculate the angular velocity needed to avoid collision
+    ang_vel = angle / time_to_collision
+
+    # Calculate the linear velocity needed to avoid collision
+    linear_vel = relative_distance / time_to_collision
+
+    # Calculate the new velocity components
+    new_linear_vel = min(linear_vel, agent.max_speed)
+    new_ang_vel = ang_vel
+
+    # Calculate the new relative velocity
+    new_relative_velocity = np.array([
+        new_linear_vel * np.cos(angle),
+        new_linear_vel * np.sin(angle)
+    ])
+
+    # Calculate the avoidance velocity
+    avoidance_velocity = new_relative_velocity - relative_velocity
+
+    # Calculate the avoidance direction (normal to VO)
+    avoidance_direction = normalized(avoidance_velocity)
+
+    return avoidance_velocity, avoidance_direction
+
 
 def norm_sq(x):
     return dot(x, x)
@@ -159,3 +216,4 @@ def normalized(x):
 
 def dist_sq(a, b):
     return norm_sq(b - a)
+
